@@ -71,24 +71,73 @@ All four organizer-published numbers reproduce exactly:
 ## Running the agent
 
 ```bash
-python -X utf8 -m scripts.smoke_agent          # 3 cheap iterations, subsampled, <$1 -- run this first
-python -X utf8 -m agent.loop                   # the real run: up to 50 iterations, 6h, $40 ceiling
+python -X utf8 -m scripts.smoke_agent          # 3 cheap iterations, subsampled -- run this first
+python -X utf8 -m scripts.run_real_agent       # the real run: up to 50 iterations, 6h, $40 ceiling, resumable
 python -X utf8 -m scripts.final_test_score     # sealed, one-shot hidden-test scoring -- run once, after convergence
 ```
 
 ## Convergence policy (declared, per organizer FAQ 2.9)
 
 The organizers permit a team-declared stopping rule provided it's fixed
-before the run and respects the hard caps. Ours:
+before the run and respects the hard caps.
+
+**This run happened in two declared phases**, disclosed here rather than
+presented as one clean run. Phase 1 (floor = 12) converged legitimately at
+the earliest point it was allowed to, using only 5% of budget and 20% of
+wall-clock, but produced an edge over baseline that post-hoc statistical
+analysis showed was indistinguishable from ordinary seed noise (z≈0.38,
+p≈0.70). Since the hidden test set had not yet been touched — the one-shot
+rule applies to *test* scoring, not to how much validation exploration
+precedes it — we made a considered decision to raise the floor and continue
+searching with a strengthened search process (see below) before finalizing.
 
 - ε = 0.002, N = 3 scored iterations (unchanged from the default)
-- **Minimum floor: 12 scored iterations** — the 4-direction explore phase
-  alone consumes 4, so this guarantees the exploit phase gets a real run
-  before stopping is even possible
+- **Minimum floor: 25 scored iterations** for the continuation phase (raised
+  from 12 once real per-iteration cost/speed was known to be far cheaper
+  than budgeted — $0.17 and ~7 min per iteration, not the $1-2/10-15min
+  assumed when 12 was first set)
 - Window semantics are cumulative, exactly as FAQ 2.9 specifies:
   `best(last N scored) - best(everything before) <= epsilon`
 - Crashed/debug iterations count toward the 50-iteration cap but never
   advance or reset the convergence window
+
+### Search-process upgrade after phase 1's post-mortem
+
+Reading the actual generated code for phase 1's most ambitious attempts
+(a sequence-modeling node and a watch-time-regression node, both of which
+underperformed) revealed real, diagnosable implementation flaws — not that
+the ideas were bad, but that e.g. raw high-cardinality ID features carry no
+generalizable signal, and a synthetic regression target can be misaligned
+with the ranking metric it's scored on. Rather than telling the agent the
+specific fixes (that would be answer-key injection into its own discovery
+process, undermining the Innovation criterion), the search process itself
+was strengthened for the continuation phase:
+
+- **Always-3-seed confirmation.** Every candidate is now confirmed on 3
+  seeds before it can be promoted to "best" — not only when the apparent
+  gain clears ε, as in phase 1 (which is exactly how a fluke became the
+  phase-1 answer). A candidate is promoted only if the *mean* across seeds
+  beats the incumbent's mean by more than ε.
+- **Comparative diagnostics.** When a candidate doesn't get promoted, the
+  next relevant prompt shows a per-impression-bucket comparison against
+  whatever *did* win — strictly more information the harness already
+  computes on both sides, not a diagnosis of cause.
+- **Calibration tracking.** Each response's predicted effect size is now
+  compared against what actually happened, and a rolling summary ("you've
+  been overconfident by ~Nx") is shown back, so the model can self-correct.
+- **A retry pool.** A successful-but-not-promoted node is no longer simply
+  discarded — it's eligible to be revisited later with its own comparative
+  diagnostics attached, so a good idea with a fixable flaw gets a second,
+  better-informed shot instead of only ever being rediscovered by luck.
+- **Best-of-2 sampling.** Each iteration now generates 2 candidate
+  responses, validates both, and only spends the full 3-seed confirmation
+  on whichever scores better at a quick seed-0 check — a standard
+  compute-for-quality trade, affordable given the budget headroom.
+- One general methodology nudge was added to `agent/prompts/improve.md`
+  (validate incrementally rather than bundling several unverified changes
+  in one shot) — generic experimental method, not a fact about this task.
+
+None of this touches `hint_level` (still 0) or reveals what to try.
 
 ## What the agent is and isn't told
 
@@ -103,9 +152,9 @@ scoring — handing the agent its own answer key would hollow that out.
 
 ## Known limitations
 
-- The node-selection policy (best/second-best + per-direction staleness
-  tracking) is a simplified version of the originally planned UCB scheme —
-  a deliberate scope cut for the time available, not an oversight.
+- The node-selection policy (best/second-best/retry-pool + per-direction
+  staleness tracking) is a simplified version of the originally planned UCB
+  scheme — a deliberate scope cut for the time available, not an oversight.
 - No held-out slice of validation exists for an independent overfitting
   check: valid labels are withheld from the sandbox by design (the same
   mechanism that makes the leakage guarantee structural), and the

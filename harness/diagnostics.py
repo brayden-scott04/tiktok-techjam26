@@ -71,6 +71,65 @@ def compute_diagnostics(user_ids, labels, scores, dates=None):
     }
 
 
+def compute_comparative_diagnostics(candidate_scores, incumbent_scores, user_ids, labels, dates=None):
+    """Per-impression-bucket delta between a candidate and the current
+    incumbent, plus whether the candidate's within-user score variance
+    collapsed relative to the incumbent's. Shown for the just-completed
+    node against whatever it was compared against -- strictly more
+    information (bucketed data the harness already computes both sides of),
+    never a diagnosis of *why* in prose, so it doesn't hand over content.
+    """
+    cand = compute_diagnostics(user_ids, labels, candidate_scores, dates=dates)
+    incu = compute_diagnostics(user_ids, labels, incumbent_scores, dates=dates)
+
+    bucket_deltas = {}
+    for label in set(cand["by_impression_bucket"]) | set(incu["by_impression_bucket"]):
+        c = cand["by_impression_bucket"].get(label)
+        i = incu["by_impression_bucket"].get(label)
+        if c is None or i is None:
+            continue
+        bucket_deltas[label] = {
+            "candidate_primary": c["primary"], "incumbent_primary": i["primary"],
+            "delta": c["primary"] - i["primary"], "users": c["users"],
+        }
+
+    return {
+        "candidate_overall": cand["overall"],
+        "incumbent_overall": incu["overall"],
+        "overall_delta": cand["overall"]["primary"] - incu["overall"]["primary"],
+        "bucket_deltas": bucket_deltas,
+        "candidate_within_user_std": cand["score_within_user_std_mean"],
+        "incumbent_within_user_std": incu["score_within_user_std_mean"],
+        "candidate_degenerate_frac": cand["degenerate_constant_score_user_frac"],
+    }
+
+
+def render_comparative_diagnostics_markdown(comp):
+    lines = [
+        f"Overall primary: candidate {comp['candidate_overall']['primary']:.4f} vs incumbent "
+        f"{comp['incumbent_overall']['primary']:.4f} (delta {comp['overall_delta']:+.4f})",
+        "",
+        "| bucket | candidate primary | incumbent primary | delta | users |",
+        "|---|---|---|---|---|",
+    ]
+    for label, d in sorted(comp["bucket_deltas"].items()):
+        lines.append(
+            f"| {label} | {d['candidate_primary']:.4f} | {d['incumbent_primary']:.4f} "
+            f"| {d['delta']:+.4f} | {d['users']} |"
+        )
+    lines.append("")
+    lines.append(
+        f"Within-user score std: candidate {comp['candidate_within_user_std']:.4f} vs incumbent "
+        f"{comp['incumbent_within_user_std']:.4f}"
+    )
+    if comp["candidate_degenerate_frac"] > 0.05:
+        lines.append(
+            f"Note: {comp['candidate_degenerate_frac']:.1%} of the candidate's users got a "
+            f"near-constant score across their impressions (little to no within-user discrimination)."
+        )
+    return "\n".join(lines)
+
+
 def render_diagnostics_markdown(diag):
     lines = ["| bucket | users | GAUC | nDCG@5 | primary |", "|---|---|---|---|---|"]
     for label, d in diag["by_impression_bucket"].items():

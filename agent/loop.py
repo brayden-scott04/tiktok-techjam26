@@ -1,18 +1,27 @@
 """Main agent controller: solution tree search, convergence check, run-log
 emission, checkpoint/resume.
 
-Scope note: this implements the core loop faithfully (two-tier LLM calls,
-validation gate, multi-seed confirmation, convergence FSM, debug/repair
-ladder, run-log) but simplifies the node-selection heuristic relative to the
-full plan (a straightforward best/second-best + per-direction staleness
-tracker, rather than a fully general UCB score). This is a deliberate scope
-cut, documented here and in the README, not an oversight.
+Post-mortem upgrade (session checkpoint 2, after run 1 converged on a
+fluke-sized, unconfirmed edge): every candidate is now always confirmed on
+3 seeds before being allowed to become "best" (no more single-seed noise
+driving the search); failed-but-successfully-run candidates are tracked in a
+retry pool with their own bucketed comparison against whatever beat them, so
+a good idea with a fixable flaw gets a second, better-informed shot instead
+of being discarded; the model's own predicted vs. actual effect is tracked
+as a calibration signal; and each iteration samples multiple candidates
+(best-of-N) rather than committing to a single LLM sample. None of this
+touches hint_level or reveals *what* to try -- it only makes the search
+more statistically honest and self-aware.
+
+Scope note: this still simplifies the node-selection heuristic relative to
+the full plan (a straightforward best/second-best/retry-pool selector with
+per-direction staleness tracking, rather than a fully general UCB score).
+This is a deliberate scope cut, documented here and in the README, not an
+oversight.
 """
-import hashlib
 import json
 import os
 import time
-import difflib
 
 import numpy as np
 
@@ -22,14 +31,13 @@ from agent.policy import check_convergence
 from agent.schema import RESPONSE_SCHEMA, REPAIR_SCHEMA
 from agent.validate import validate_candidate
 from harness import dataset as ds
-from harness.diagnostics import compute_diagnostics, render_diagnostics_markdown
+from harness.diagnostics import (
+    compute_diagnostics, render_diagnostics_markdown,
+    compute_comparative_diagnostics, render_comparative_diagnostics_markdown,
+)
 from harness.eval_client import eval_valid_client  # noqa: F401 (documents that loop.py itself never scores test)
 from harness.runner import run_node
 from harness import task_spec as spec
-
-
-def _sha256(text):
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 class AgentLoop:
@@ -70,9 +78,12 @@ class AgentLoop:
         self.plateau_misses = tree["plateau_same_direction_misses"]
         self.plateau_min_gain = tree["plateau_min_gain"]
         self.eps_greedy_p = tree["epsilon_greedy_revisit_p"]
+        self.retry_pool_p = tree.get("retry_pool_p", 0.15)
+        self.retry_pool_max_size = tree.get("retry_pool_max_size", 5)
 
         self.debug_cfg = self.cfg["debug"]
         self.sandbox_cfg = self.cfg["sandbox"]
+        self.n_candidates = self.cfg.get("search", {}).get("candidates_per_iteration", 1)
 
         self.state = self._load_or_init_state()
         self._wall_start = time.time() - self.state["wall_seconds"]
@@ -95,6 +106,7 @@ class AgentLoop:
             "best_primary": -1.0,
             "second_best_node_id": None,
             "second_best_primary": -1.0,
+            "retry_pool": [],
             "total_iterations": 0,
             "scored_iterations": 0,
             "wall_seconds": 0.0,
@@ -117,7 +129,7 @@ class AgentLoop:
     # ---------------------------------------------------------- helpers
 
     def _budget_block(self):
-        return memory.render_budget_block(
+        base = memory.render_budget_block(
             {
                 "total_iterations": self.state["total_iterations"],
                 "max_total_iterations": self.max_total_iterations,
@@ -129,6 +141,17 @@ class AgentLoop:
                 "max_cost_usd": self.max_cost_usd,
             }
         )
+        calib = self._calibration_summary()
+        return f"{base}\n{calib}" if calib else base
+
+    def _calibration_summary(self):
+        pairs = []
+        for nid in self.state["order"][-6:]:
+            n = self.state["nodes"][nid]
+            ee = n.get("expected_effect")
+            if ee and ee.get("delta") is not None and n.get("calibration_error") is not None:
+                pairs.append((ee["delta"], n["calibration_error"]))
+        return memory.render_calibration_summary(pairs)
 
     def _journal_nodes(self):
         out = []
@@ -141,6 +164,7 @@ class AgentLoop:
                     "hypothesis": n.get("hypothesis"), "status": n["status"],
                     "metrics": n.get("metrics"), "delta_vs_baseline": n.get("delta_vs_baseline"),
                     "seconds": n.get("seconds"), "est_runtime_sec": n.get("est_runtime_sec"),
+                    "expected_effect": n.get("expected_effect"), "calibration_error": n.get("calibration_error"),
                 }
             )
         return out
@@ -170,30 +194,38 @@ class AgentLoop:
         return [d for d in DIRECTION_ENUM if d not in used]
 
     def _pick_action(self):
-        """Returns (action, parent_node_id_or_None, forced_direction_or_None)."""
+        """Returns (action, parent_node_id_or_None)."""
         n_scored = self.state["scored_iterations"]
         if n_scored < self.explore_drafts:
-            return "draft", None, None
+            return "draft", None
 
         stale = self._stale_directions()
         unused = self._unused_directions()
+        retry_pool = self.state.get("retry_pool", [])
+
+        roll = self.rng.random()
+        if retry_pool and roll < self.retry_pool_p:
+            # give the most recent good-idea-but-not-promoted node another,
+            # better-informed shot (see comparison_vs_incumbent_md wiring).
+            return "improve", retry_pool[-1]
 
         use_second_best = (
-            self.state["second_best_node_id"] is not None and self.rng.random() < self.eps_greedy_p
+            self.state["second_best_node_id"] is not None
+            and roll < self.retry_pool_p + self.eps_greedy_p
         )
         candidate_parent = self.state["second_best_node_id"] if use_second_best else self.state["best_node_id"]
         candidate_direction = self.state["nodes"][candidate_parent].get("direction") if candidate_parent else None
 
         if candidate_direction in stale:
             if unused:
-                return "draft", None, None
+                return "draft", None
             # all explored directions stale and none unused: fall back to
             # improving the global best regardless of staleness -- better
             # than stalling, and the convergence FSM will end the run anyway
             # once genuinely nothing is working.
-            return "improve", self.state["best_node_id"], None
+            return "improve", self.state["best_node_id"]
 
-        return "improve", candidate_parent, None
+        return "improve", candidate_parent
 
     def _record_direction_attempt(self, direction, gain):
         stats = self.state["direction_stats"].setdefault(
@@ -205,9 +237,15 @@ class AgentLoop:
         else:
             stats["consecutive_misses"] += 1
 
+    def _record_direction_best(self, direction, primary):
+        stats = self.state["direction_stats"].setdefault(
+            direction, {"attempts": 0, "best_primary": -1.0, "consecutive_misses": 0}
+        )
+        stats["best_primary"] = max(stats["best_primary"], primary)
+
     # ---------------------------------------------------------- LLM calls
 
-    def _call_llm_for_candidate(self, action, parent_id, forced_direction):
+    def _call_llm_for_candidate(self, action, parent_id):
         journal_md = memory.render_journal(self._journal_nodes())
         diag_md = self._best_node_diagnostics_md()
         budget_md = self._budget_block()
@@ -219,7 +257,10 @@ class AgentLoop:
             parent = self.state["nodes"][parent_id]
             with open(parent["code_path"], encoding="utf-8") as fh:
                 parent_code = fh.read()
-            messages = memory.build_improve_messages(journal_md, diag_md, budget_md, parent_code, parent.get("hypothesis", ""))
+            messages = memory.build_improve_messages(
+                journal_md, diag_md, budget_md, parent_code, parent.get("hypothesis", ""),
+                comparison_md=parent.get("comparison_vs_incumbent_md"),
+            )
 
         parsed, usage = self.llm.call("brain", messages, RESPONSE_SCHEMA, "solution_response")
         self.state["cost_usd"] += usage["cost_usd"]
@@ -231,7 +272,41 @@ class AgentLoop:
         self.state["cost_usd"] += usage["cost_usd"]
         return parsed["code"], usage
 
-    # ---------------------------------------------------------- one iteration
+    def _validate_with_repairs(self, code, hypothesis, known_hashes):
+        """Runs the compile->guard->dedup->smoke gate, repairing on failure up
+        to max_debug_attempts_per_node times. Returns
+        (final_code, ast_hash_or_None, status, events, usages)."""
+        events = []
+        usages = []
+        status = None
+        ast_hash = None
+        smoke_timeout = self.sandbox_cfg["smoke_timeout_sec"]
+
+        for attempt in range(1, self.debug_cfg["max_debug_attempts_per_node"] + 2):
+            result = validate_candidate(
+                code, known_hashes, self.sanitized_path, self.valid_user_ids, self.valid_labels,
+                self.root, smoke_timeout_sec=smoke_timeout,
+            )
+            if result.passed:
+                status = "validated"
+                ast_hash = result.ast_hash
+                break
+            events.append({"type": "guard_or_smoke_reject", "stage": result.stage, "detail": result.detail[:2000]})
+            if attempt > self.debug_cfg["max_debug_attempts_per_node"]:
+                status = "dead"
+                break
+            try:
+                code, repair_usage = self._repair(code, f"[{result.stage}] {result.detail}", hypothesis)
+                usages.append(repair_usage)
+                events.append({"type": "debug_repair_attempt", "attempt": attempt, "resolved": None})
+            except LLMCallError as e:
+                events.append({"type": "llm_call_failed", "reason": str(e)})
+                status = "dead"
+                break
+
+        return code, ast_hash, status, events, usages
+
+    # ---------------------------------------------------------- execution
 
     def _run_full(self, solution_path, seed, timeout_sec):
         return run_node(
@@ -248,138 +323,172 @@ class AgentLoop:
             repo_root=self.root,
         )
 
+    def _mean_metrics(self, results):
+        """results: list of NodeResult, some possibly failed. Returns
+        (metrics_dict_or_None, n_seeds_ok)."""
+        from kit.evaluate import evaluate as kit_evaluate
+
+        ok = [r for r in results if r.status == "ok"]
+        if not ok:
+            return None, 0
+        per_seed = [kit_evaluate(self.valid_user_ids, self.valid_labels, r.valid_scores) for r in ok]
+        metrics = {k: float(np.mean([m[k] for m in per_seed])) for k in ("GAUC", "nDCG@5", "primary")}
+        metrics["primary_std"] = float(np.std([m["primary"] for m in per_seed])) if len(per_seed) > 1 else 0.0
+        metrics["n_seeds_ok"] = len(ok)
+        return metrics, len(ok)
+
     def step(self):
-        """Runs exactly one iteration (one LLM-authored node, possibly after
-        internal repair attempts). Returns the run_log record for it."""
-        action, parent_id, _ = self._pick_action()
+        """Runs exactly one iteration: samples up to n_candidates LLM
+        responses (best-of-N), validates each through the repair ladder,
+        quick-checks validated survivors at seed 0, and spends the full
+        3-seed confirmation only on the best-scoring one. Returns the
+        run_log record for it."""
+        action, parent_id = self._pick_action()
         events = []
+        usages = []
         t_iter0 = time.time()
 
-        try:
-            parsed, usage = self._call_llm_for_candidate(action, parent_id, None)
-        except LLMCallError as e:
-            events.append({"type": "llm_call_failed", "reason": str(e)})
-            self.state["total_iterations"] += 1
-            record = self._make_record(action, parent_id, None, None, "llm_error", events, [])
-            self._append_log(record)
-            self._save_state()
-            return record
+        candidates = []
+        for i in range(self.n_candidates):
+            try:
+                parsed, usage = self._call_llm_for_candidate(action, parent_id)
+                usages.append(usage)
+            except LLMCallError as e:
+                events.append({"type": "llm_call_failed", "reason": str(e), "candidate": i})
+                continue
+            known_hashes = set(self.state["known_ast_hashes"]) | {
+                c["ast_hash"] for c in candidates if c.get("ast_hash")
+            }
+            final_code, ast_hash, status, sub_events, sub_usages = self._validate_with_repairs(
+                parsed["code"], parsed["hypothesis"], known_hashes
+            )
+            usages.extend(sub_usages)
+            for e in sub_events:
+                e["candidate"] = i
+                events.append(e)
+            candidates.append(
+                {"parsed": parsed, "code": final_code, "ast_hash": ast_hash, "status": status, "direction": parsed["direction"]}
+            )
 
-        code = parsed["code"]
-        direction = parsed["direction"]
-        node_num = self.state["total_iterations"] + 1
+        self.state["total_iterations"] += 1
+        node_num = self.state["total_iterations"]
         node_id = f"n{node_num:04d}"
         node_dir = os.path.join(self.solutions_dir, node_id)
         os.makedirs(node_dir, exist_ok=True)
         code_path = os.path.join(node_dir, "solution.py")
 
-        usages = [usage]
-        known_hashes = set(self.state["known_ast_hashes"])
-        status = None
-        smoke_timeout = self.sandbox_cfg["smoke_timeout_sec"]
+        metrics = delta = seconds = direction = parsed = comparison_md = calibration_error = None
+        ast_hash = None
+        validated = [c for c in candidates if c["status"] == "validated"]
 
-        for attempt in range(1, self.debug_cfg["max_debug_attempts_per_node"] + 2):
-            with open(code_path, "w", encoding="utf-8") as fh:
-                fh.write(code)
-            result = validate_candidate(
-                code, known_hashes, self.sanitized_path, self.valid_user_ids, self.valid_labels,
-                self.root, smoke_timeout_sec=smoke_timeout,
-            )
-            if result.passed:
-                status = "validated"
-                break
-            events.append({"type": "guard_or_smoke_reject", "stage": result.stage, "detail": result.detail[:2000]})
-            if attempt > self.debug_cfg["max_debug_attempts_per_node"]:
-                status = "dead"
-                break
-            try:
-                code, repair_usage = self._repair(code, f"[{result.stage}] {result.detail}", parsed["hypothesis"])
-                usages.append(repair_usage)
-                events.append({"type": "debug_repair_attempt", "attempt": attempt, "resolved": None})
-            except LLMCallError as e:
-                events.append({"type": "llm_call_failed", "reason": str(e)})
-                status = "dead"
-                break
-
-        self.state["total_iterations"] += 1
-        ast_hash = result.ast_hash if status == "validated" else None
-
-        metrics = None
-        delta = None
-        seconds = None
-        eval_calls = None
-
-        if status == "validated":
+        if not validated:
+            status = "dead" if candidates else "llm_error"
+            if candidates:
+                parsed = candidates[0]["parsed"]
+                direction = candidates[0]["direction"]
+                with open(code_path, "w", encoding="utf-8") as fh:
+                    fh.write(candidates[0]["code"])
+        else:
             full_timeout = self.sandbox_cfg["full_timeout_sec"]
-            r0 = self._run_full(code_path, seed=0, timeout_sec=full_timeout)
-            if r0.status != "ok":
-                events.append({"type": "full_run_failed", "detail": (r0.traceback or r0.status)[:2000]})
+            quick = []
+            for c in validated:
+                tmp_path = os.path.join(node_dir, "_candidate_tmp.py")
+                with open(tmp_path, "w", encoding="utf-8") as fh:
+                    fh.write(c["code"])
+                r0 = self._run_full(tmp_path, seed=0, timeout_sec=full_timeout)
+                quick.append((c, r0))
+
+            ok_quick = [(c, r) for c, r in quick if r.status == "ok"]
+            if not ok_quick:
                 status = "error"
+                best_c, best_r = quick[0]
+                parsed, direction, ast_hash = best_c["parsed"], best_c["direction"], best_c["ast_hash"]
+                events.append({"type": "full_run_failed", "detail": (best_r.traceback or best_r.status)[:2000]})
+                with open(code_path, "w", encoding="utf-8") as fh:
+                    fh.write(best_c["code"])
+                seconds = sum(r.seconds for _, r in quick)
             else:
                 from kit.evaluate import evaluate as kit_evaluate
 
-                m0 = kit_evaluate(self.valid_user_ids, self.valid_labels, r0.valid_scores)
-                incumbent = self.state["best_primary"]
-                seconds = r0.seconds
-                eval_calls = r0.eval_calls
+                scored = [(c, r, kit_evaluate(self.valid_user_ids, self.valid_labels, r.valid_scores)) for c, r in ok_quick]
+                best_c, best_r0, _ = max(scored, key=lambda t: t[2]["primary"])
+                parsed, direction, ast_hash = best_c["parsed"], best_c["direction"], best_c["ast_hash"]
+                with open(code_path, "w", encoding="utf-8") as fh:
+                    fh.write(best_c["code"])
 
-                if m0["primary"] > incumbent + self.epsilon:
-                    # Noise guard: a single-seed gain this size is only ~2.5x
-                    # the baseline's own seed std (0.0008), so confirm on two
-                    # more seeds before accepting -- and average ALL THREE
-                    # metrics (not just primary) so GAUC/nDCG@5/primary stay
-                    # internally consistent in the log (primary should equal
-                    # their mean, not seed-0's GAUC/nDCG@5 paired with a
-                    # 3-seed primary).
-                    r1 = self._run_full(code_path, seed=1, timeout_sec=full_timeout)
-                    r2 = self._run_full(code_path, seed=2, timeout_sec=full_timeout)
-                    seeds_ok = [r for r in (r0, r1, r2) if r.status == "ok"]
-                    per_seed = [kit_evaluate(self.valid_user_ids, self.valid_labels, r.valid_scores) for r in seeds_ok]
-                    metrics = {
-                        k: float(np.mean([m[k] for m in per_seed])) if per_seed else m0[k]
-                        for k in ("GAUC", "nDCG@5", "primary")
-                    }
-                    metrics["primary_std"] = float(np.std([m["primary"] for m in per_seed])) if len(per_seed) > 1 else 0.0
-                    seconds = sum(r.seconds for r in (r0, r1, r2))
+                r1 = self._run_full(code_path, seed=1, timeout_sec=full_timeout)
+                r2 = self._run_full(code_path, seed=2, timeout_sec=full_timeout)
+                metrics, _ = self._mean_metrics([best_r0, r1, r2])
+                seconds = sum(r.seconds for _, r in quick) + r1.seconds + r2.seconds
+
+                if metrics is None:
+                    status = "error"
+                    events.append({"type": "full_run_failed", "detail": "confirmation seeds 1,2 both failed after a working seed 0"})
                 else:
-                    metrics = {"GAUC": m0["GAUC"], "nDCG@5": m0["nDCG@5"], "primary": m0["primary"]}
+                    delta = metrics["primary"] - spec.BASELINE_VALID_PRIMARY
+                    status = "ok"
 
-                delta = metrics["primary"] - spec.BASELINE_VALID_PRIMARY
-                status = "ok"
+                    valid_scores_path = os.path.join(node_dir, "valid_scores.npy")
+                    test_scores_path = os.path.join(node_dir, "test_scores.npy")
+                    np.save(valid_scores_path, best_r0.valid_scores)
+                    np.save(test_scores_path, best_r0.test_scores)
 
-                valid_scores_path = os.path.join(node_dir, "valid_scores.npy")
-                test_scores_path = os.path.join(node_dir, "test_scores.npy")
-                np.save(valid_scores_path, r0.valid_scores)
-                np.save(test_scores_path, r0.test_scores)
+                    incumbent = self.state["best_primary"]
+                    gain = metrics["primary"] - incumbent
+                    self._record_direction_attempt(direction, gain)
+                    self._record_direction_best(direction, metrics["primary"])
 
-                gain = metrics["primary"] - incumbent
-                self._record_direction_attempt(direction, gain)
-                self._record_direction_best(direction, metrics["primary"])
+                    if self.state["best_node_id"]:
+                        inc_path = self.state["nodes"][self.state["best_node_id"]].get("valid_scores_path")
+                        if inc_path and os.path.exists(inc_path):
+                            inc_scores = np.load(inc_path)
+                            comp = compute_comparative_diagnostics(
+                                best_r0.valid_scores, inc_scores, self.valid_user_ids, self.valid_labels,
+                                dates=self.valid_dates,
+                            )
+                            comparison_md = render_comparative_diagnostics_markdown(comp)
 
-                if metrics["primary"] > incumbent:
-                    self.state["second_best_node_id"] = self.state["best_node_id"]
-                    self.state["second_best_primary"] = incumbent
-                    self.state["best_node_id"] = node_id
-                    self.state["best_primary"] = metrics["primary"]
+                    # Statistically honest promotion: only a CONFIRMED
+                    # (3-seed mean) gain clearing epsilon becomes "best" --
+                    # this is the direct fix for run 1's fluke (n0011 was
+                    # promoted on a single seed with a sub-epsilon gain).
+                    promoted = metrics["primary"] > incumbent + self.epsilon
+                    if promoted:
+                        self.state["second_best_node_id"] = self.state["best_node_id"]
+                        self.state["second_best_primary"] = incumbent
+                        self.state["best_node_id"] = node_id
+                        self.state["best_primary"] = metrics["primary"]
+                    else:
+                        pool = self.state.setdefault("retry_pool", [])
+                        pool.append(node_id)
+                        self.state["retry_pool"] = pool[-self.retry_pool_max_size:]
 
-                self.state["scored_iterations"] += 1
-                self.state["scored_primaries"].append(metrics["primary"])
-                self.state["scored_directions"].append(direction)
+                    self.state["scored_iterations"] += 1
+                    self.state["scored_primaries"].append(metrics["primary"])
+                    self.state["scored_directions"].append(direction)
 
-                if metrics["primary"] > self.oracle_alarm:
-                    events.append({"type": "leak_alarm", "primary": metrics["primary"]})
+                    if metrics["primary"] > self.oracle_alarm:
+                        events.append({"type": "leak_alarm", "primary": metrics["primary"]})
+
+                    expected_effect = parsed.get("expected_effect")
+                    if expected_effect and expected_effect.get("delta") is not None:
+                        calibration_error = gain - expected_effect["delta"]
 
         if ast_hash:
             self.state["known_ast_hashes"].append(ast_hash)
 
         node_record = {
             "action": action, "parent_node_id": parent_id, "direction": direction,
-            "hypothesis": parsed["hypothesis"], "status": status,
+            "hypothesis": parsed.get("hypothesis") if parsed else None, "status": status,
             "code_path": code_path, "ast_hash": ast_hash,
             "metrics": metrics, "delta_vs_baseline": delta, "seconds": seconds,
-            "est_runtime_sec": parsed.get("est_runtime_sec"),
+            "est_runtime_sec": parsed.get("est_runtime_sec") if parsed else None,
+            "expected_effect": parsed.get("expected_effect") if parsed else None,
+            "calibration_error": calibration_error,
+            "comparison_vs_incumbent_md": comparison_md,
             "valid_scores_path": os.path.join(node_dir, "valid_scores.npy") if metrics else None,
             "test_scores_path": os.path.join(node_dir, "test_scores.npy") if metrics else None,
+            "n_candidates_tried": len(candidates),
         }
         self.state["nodes"][node_id] = node_record
         self.state["order"].append(node_id)
@@ -387,16 +496,11 @@ class AgentLoop:
         record = self._make_record(action, parent_id, direction, node_id, status, events, usages, parsed, metrics, delta, seconds)
         record["iteration"] = self.state["total_iterations"]
         record["node_id"] = node_id
+        record["n_candidates_tried"] = len(candidates)
         record["wall_seconds_this_iteration"] = time.time() - t_iter0
         self._append_log(record)
         self._save_state()
         return record
-
-    def _record_direction_best(self, direction, primary):
-        stats = self.state["direction_stats"].setdefault(
-            direction, {"attempts": 0, "best_primary": -1.0, "consecutive_misses": 0}
-        )
-        stats["best_primary"] = max(stats["best_primary"], primary)
 
     def _make_record(self, action, parent_id, direction, node_id, status, events, usages, parsed=None, metrics=None, delta=None, seconds=None):
         total_cost = sum(u["cost_usd"] for u in usages if u)
@@ -461,15 +565,18 @@ class AgentLoop:
             self.step()
 
     def _seed_node0(self):
-        """Scores the pre-existing n0000 baseline once to seed best_primary.
-        Not LLM-authored, so it does not count against total_iterations."""
+        """Scores the pre-existing n0000 baseline (3-seed mean, same rigor as
+        every other node) to seed best_primary. Not LLM-authored, so it does
+        not count against total_iterations."""
         code_path = os.path.join(self.solutions_dir, "n0000", "solution.py")
-        r0 = self._run_full(code_path, seed=0, timeout_sec=self.sandbox_cfg["full_timeout_sec"])
+        full_timeout = self.sandbox_cfg["full_timeout_sec"]
+        r0 = self._run_full(code_path, seed=0, timeout_sec=full_timeout)
         if r0.status != "ok":
             raise RuntimeError(f"failed to seed node0: {r0.status} {r0.traceback}")
-        from kit.evaluate import evaluate as kit_evaluate
+        r1 = self._run_full(code_path, seed=1, timeout_sec=full_timeout)
+        r2 = self._run_full(code_path, seed=2, timeout_sec=full_timeout)
+        metrics, _ = self._mean_metrics([r0, r1, r2])
 
-        m0 = kit_evaluate(self.valid_user_ids, self.valid_labels, r0.valid_scores)
         node_dir = os.path.join(self.solutions_dir, "n0000")
         np.save(os.path.join(node_dir, "valid_scores.npy"), r0.valid_scores)
         np.save(os.path.join(node_dir, "test_scores.npy"), r0.test_scores)
@@ -477,16 +584,16 @@ class AgentLoop:
             "action": "root", "parent_node_id": None, "direction": "baseline",
             "hypothesis": "official FM baseline, ported to the fit_predict contract",
             "status": "ok", "code_path": code_path,
-            "metrics": {"GAUC": m0["GAUC"], "nDCG@5": m0["nDCG@5"], "primary": m0["primary"]},
-            "delta_vs_baseline": m0["primary"] - spec.BASELINE_VALID_PRIMARY,
-            "seconds": r0.seconds, "est_runtime_sec": 40,
+            "metrics": metrics,
+            "delta_vs_baseline": metrics["primary"] - spec.BASELINE_VALID_PRIMARY,
+            "seconds": r0.seconds + r1.seconds + r2.seconds, "est_runtime_sec": 40,
             "valid_scores_path": os.path.join(node_dir, "valid_scores.npy"),
             "test_scores_path": os.path.join(node_dir, "test_scores.npy"),
         }
         self.state["order"].append("n0000")
         self.state["best_node_id"] = "n0000"
-        self.state["best_primary"] = m0["primary"]
+        self.state["best_primary"] = metrics["primary"]
         self.state["scored_iterations"] += 1
-        self.state["scored_primaries"].append(m0["primary"])
+        self.state["scored_primaries"].append(metrics["primary"])
         self.state["scored_directions"].append("baseline")
         self._save_state()

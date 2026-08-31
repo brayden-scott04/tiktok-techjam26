@@ -2,8 +2,8 @@
   "convergence": {
     "epsilon": 0.002,
     "N": 3,
-    "min_scored_iterations": 12,
-    "note": "Cumulative-window rule per organizer FAQ 2.9: converged when best(primary over last N scored iterations) - best(primary over everything before that window) <= epsilon. Crashed/debug iterations do not advance or reset the window. min_scored_iterations is a team-declared floor, permitted by the same FAQ, fixed here before the run."
+    "min_scored_iterations": 25,
+    "note": "Cumulative-window rule per organizer FAQ 2.9: converged when best(primary over last N scored iterations) - best(primary over everything before that window) <= epsilon. Crashed/debug iterations do not advance or reset the window. min_scored_iterations is a team-declared floor, permitted by the same FAQ, fixed here before the run. Raised from 12 to 25 for the continuation phase after run 1 converged at the earliest allowed point using only 5% of budget and 20% of wall-clock -- disclosed as a considered re-declaration for this phase, not a silent change."
   },
   "caps": {
     "max_total_iterations": 50,
@@ -13,7 +13,12 @@
   },
   "seeds": {
     "candidate_seeds": [0, 1, 2],
+    "always_confirm_all_seeds": true,
     "accept_requires_mean_gain_over_epsilon": true
+  },
+  "search": {
+    "candidates_per_iteration": 2,
+    "note": "Best-of-N: generate this many candidate responses per draft/improve call, validate all through compile->guard->dedup->smoke, quick-check survivors at seed 0, and only spend the full multi-seed confirmation on whichever scores best."
   },
   "hint_level": 0,
   "sandbox": {
@@ -28,7 +33,10 @@
     "max_children_per_node": 3,
     "plateau_same_direction_misses": 2,
     "plateau_min_gain": 0.001,
-    "epsilon_greedy_revisit_p": 0.15
+    "epsilon_greedy_revisit_p": 0.15,
+    "retry_pool_p": 0.15,
+    "retry_pool_max_size": 5,
+    "note": "retry_pool holds recent successful-but-not-promoted nodes with their own bucketed comparison against whatever beat them, so a good idea with a fixable flaw gets revisited with real diagnostic context instead of being discarded after one attempt."
   },
   "debug": {
     "max_debug_attempts_per_node": 2,

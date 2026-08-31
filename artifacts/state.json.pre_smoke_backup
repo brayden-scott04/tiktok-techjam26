@@ -1,0 +1,355 @@
+{
+  "run_id": "run-20260831-233055",
+  "nodes": {
+    "n0000": {
+      "action": "root",
+      "parent_node_id": null,
+      "direction": "baseline",
+      "hypothesis": "official FM baseline, ported to the fit_predict contract",
+      "status": "ok",
+      "code_path": "C:\\Users\\brayd\\Desktop\\Personal Projects\\TikTok TechJam\\solutions\\n0000\\solution.py",
+      "metrics": {
+        "GAUC": 0.6672305987565891,
+        "nDCG@5": 0.5357232891330793,
+        "primary": 0.6014769439448342
+      },
+      "delta_vs_baseline": -0.00012305605516582663,
+      "seconds": 21.073426485061646,
+      "est_runtime_sec": 40,
+      "valid_scores_path": "C:\\Users\\brayd\\Desktop\\Personal Projects\\TikTok TechJam\\solutions\\n0000\\valid_scores.npy",
+      "test_scores_path": "C:\\Users\\brayd\\Desktop\\Personal Projects\\TikTok TechJam\\solutions\\n0000\\test_scores.npy"
+    },
+    "n0001": {
+      "action": "draft",
+      "parent_node_id": null,
+      "direction": "loss",
+      "hypothesis": "Replace global pointwise BCE with within-user BPR training, pairing every positive impression with a sampled negative from the same user. This should better match positive-weighted GAUC, while a mixture of uniform and model-hard negatives should improve top-ranked positions and nDCG@5, especially for users with many impressions.",
+      "status": "ok",
+      "code_path": "C:\\Users\\brayd\\Desktop\\Personal Projects\\TikTok TechJam\\solutions\\n0001\\solution.py",
+      "ast_hash": "ded61833900b687799d30ed5a2b49b73f423c2de1ee480c8e31790d18d5c3768",
+      "metrics": {
+        "GAUC": 0.6537094950207141,
+        "nDCG@5": 0.5303904412461625,
+        "primary": 0.5920499681334384
+      },
+      "delta_vs_baseline": -0.00955003186656167,
+      "seconds": 5.310488939285278,
+      "est_runtime_sec": 65,
+      "valid_scores_path": "C:\\Users\\brayd\\Desktop\\Personal Projects\\TikTok TechJam\\solutions\\n0001\\valid_scores.npy",
+      "test_scores_path": "C:\\Users\\brayd\\Desktop\\Personal Projects\\TikTok TechJam\\solutions\\n0001\\test_scores.npy"
+    },
+    "n0002": {
+      "action": "draft",
+      "parent_node_id": null,
+      "direction": "multitask",
+      "hypothesis": "Train a shared-embedding multi-task FM on long-view, click, completion ratio, engagement, and hate outcomes, while using only long-view and predicted completion at inference. Dense watch-time supervision should regularize sparse user/item interactions and distinguish impressions that have similar binary-label evidence but different expected viewing depth.",
+      "status": "ok",
+      "code_path": "C:\\Users\\brayd\\Desktop\\Personal Projects\\TikTok TechJam\\solutions\\n0002\\solution.py",
+      "ast_hash": "e10ce1ba76b84e87bef07ee7f7384a1ad4665f653ff4c542f441c7507f01c392",
+      "metrics": {
+        "GAUC": 0.6603730630593326,
+        "nDCG@5": 0.5330113209855799,
+        "primary": 0.5966921920224563
+      },
+      "delta_vs_baseline": -0.004907807977543754,
+      "seconds": 12.926179647445679,
+      "est_runtime_sec": 85,
+      "valid_scores_path": "C:\\Users\\brayd\\Desktop\\Personal Projects\\TikTok TechJam\\solutions\\n0002\\valid_scores.npy",
+      "test_scores_path": "C:\\Users\\brayd\\Desktop\\Personal Projects\\TikTok TechJam\\solutions\\n0002\\test_scores.npy"
+    },
+    "n0003": {
+      "action": "draft",
+      "parent_node_id": null,
+      "direction": "time_shift",
+      "hypothesis": "Replace the latent FM with a temporally weighted hierarchical target-encoding ranker that estimates video/author relevance and each user\u2019s historical affinity for candidate attributes. Recency weighting should handle the observed date variation, while user-conditioned rates should especially improve ranking for users with longer histories.",
+      "status": "ok",
+      "code_path": "C:\\Users\\brayd\\Desktop\\Personal Projects\\TikTok TechJam\\solutions\\n0003\\solution.py",
+      "ast_hash": "eaa60d504ac0241fcda5eef633128f8bf752788fabf4bd28cbaec66912b039af",
+      "metrics": {
+        "GAUC": 0.6467353066820575,
+        "nDCG@5": 0.5262183459027036,
+        "primary": 0.5864768262923805
+      },
+      "delta_vs_baseline": -0.015123173707619508,
+      "seconds": 1.6801097393035889,
+      "est_runtime_sec": 70,
+      "valid_scores_path": "C:\\Users\\brayd\\Desktop\\Personal Projects\\TikTok TechJam\\solutions\\n0003\\valid_scores.npy",
+      "test_scores_path": "C:\\Users\\brayd\\Desktop\\Personal Projects\\TikTok TechJam\\solutions\\n0003\\test_scores.npy"
+    },
+    "n0004": {
+      "action": "improve",
+      "parent_node_id": "n0000",
+      "direction": "loss",
+      "hypothesis": "Weight each pointwise BCE example by the inverse square root of its user's train impression count. This should reduce domination by the small heavy-user cohort and better align FM training with the metric's substantial macro-per-user component while retaining some impression-level weighting for GAUC.",
+      "status": "ok",
+      "code_path": "C:\\Users\\brayd\\Desktop\\Personal Projects\\TikTok TechJam\\solutions\\n0004\\solution.py",
+      "ast_hash": "04c95ba343e868b66bcb286eb65bfcbd46f0cb0e0fd856460f5c28626ea71db9",
+      "metrics": {
+        "GAUC": 0.664277395135532,
+        "nDCG@5": 0.5341549028359933,
+        "primary": 0.5992161489857626
+      },
+      "delta_vs_baseline": -0.002383851014237437,
+      "seconds": 16.729952335357666,
+      "est_runtime_sec": 24,
+      "valid_scores_path": "C:\\Users\\brayd\\Desktop\\Personal Projects\\TikTok TechJam\\solutions\\n0004\\valid_scores.npy",
+      "test_scores_path": "C:\\Users\\brayd\\Desktop\\Personal Projects\\TikTok TechJam\\solutions\\n0004\\test_scores.npy"
+    },
+    "n0005": {
+      "action": "improve",
+      "parent_node_id": "n0000",
+      "direction": "arch",
+      "hypothesis": "Add hour-of-day as a sixth categorical FM field. Because hour varies across a user's impressions, its main effect and interactions with user, duration, tab, and item can alter within-user rankings and capture time-dependent viewing behavior missing from the parent model.",
+      "status": "ok",
+      "code_path": "C:\\Users\\brayd\\Desktop\\Personal Projects\\TikTok TechJam\\solutions\\n0005\\solution.py",
+      "ast_hash": "b9407aaf008873dcd9dee247563c36cb745b9c16329b05654cc74f0ec9f8f016",
+      "metrics": {
+        "GAUC": 0.6667145958927835,
+        "nDCG@5": 0.5360297236798828,
+        "primary": 0.6013721597863331
+      },
+      "delta_vs_baseline": -0.00022784021366695217,
+      "seconds": 18.435020685195923,
+      "est_runtime_sec": 24,
+      "valid_scores_path": "C:\\Users\\brayd\\Desktop\\Personal Projects\\TikTok TechJam\\solutions\\n0005\\valid_scores.npy",
+      "test_scores_path": "C:\\Users\\brayd\\Desktop\\Personal Projects\\TikTok TechJam\\solutions\\n0005\\test_scores.npy"
+    },
+    "n0006": {
+      "action": "improve",
+      "parent_node_id": "n0000",
+      "direction": "arch",
+      "hypothesis": "Add a second, finer 50-quantile duration field while retaining the baseline's stable 10-quantile duration field. Multi-resolution duration interactions should improve within-user ordering when candidates share a coarse duration bucket, especially for users with many impressions where top-5 ordering is weakest.",
+      "status": "ok",
+      "code_path": "C:\\Users\\brayd\\Desktop\\Personal Projects\\TikTok TechJam\\solutions\\n0006\\solution.py",
+      "ast_hash": "e537f6fc61512075606c0cbfb277830c68f4bcf957c69172a0b05fc7623a54aa",
+      "metrics": {
+        "GAUC": 0.6660844397224381,
+        "nDCG@5": 0.5353757229963012,
+        "primary": 0.6007300813593697
+      },
+      "delta_vs_baseline": -0.0008699186406303516,
+      "seconds": 18.758955001831055,
+      "est_runtime_sec": 23,
+      "valid_scores_path": "C:\\Users\\brayd\\Desktop\\Personal Projects\\TikTok TechJam\\solutions\\n0006\\valid_scores.npy",
+      "test_scores_path": "C:\\Users\\brayd\\Desktop\\Personal Projects\\TikTok TechJam\\solutions\\n0006\\test_scores.npy"
+    },
+    "n0007": {
+      "action": "improve",
+      "parent_node_id": "n0000",
+      "direction": "ensemble",
+      "hypothesis": "Blend the FM logits with a train-only, Bayesian-smoothed user\u2013author long-view affinity residual. This should recover repeated creator preferences that a low-rank FM can underfit, particularly for users with many candidate impressions where the current nDCG@5 is weakest.",
+      "status": "ok",
+      "code_path": "C:\\Users\\brayd\\Desktop\\Personal Projects\\TikTok TechJam\\solutions\\n0007\\solution.py",
+      "ast_hash": "37a131dd97933a7bca09d36d6bb5cd1295e47d80031adcb02362f7e1a16b02b0",
+      "metrics": {
+        "GAUC": 0.6672305987565891,
+        "nDCG@5": 0.5357232891330793,
+        "primary": 0.6014769439448342
+      },
+      "delta_vs_baseline": -0.00012305605516582663,
+      "seconds": 21.79378056526184,
+      "est_runtime_sec": 27,
+      "valid_scores_path": "C:\\Users\\brayd\\Desktop\\Personal Projects\\TikTok TechJam\\solutions\\n0007\\valid_scores.npy",
+      "test_scores_path": "C:\\Users\\brayd\\Desktop\\Personal Projects\\TikTok TechJam\\solutions\\n0007\\test_scores.npy"
+    },
+    "n0008": {
+      "action": "improve",
+      "parent_node_id": "n0000",
+      "direction": "time_shift",
+      "hypothesis": "Apply moderate recency weighting to the FM's pointwise BCE so recent training dates influence the model about twice as much as the oldest dates. If the validation-date performance range reflects temporal drift, this should better align learned video, author, and interaction effects with the future validation/test distribution without discarding older data.",
+      "status": "ok",
+      "code_path": "C:\\Users\\brayd\\Desktop\\Personal Projects\\TikTok TechJam\\solutions\\n0008\\solution.py",
+      "ast_hash": "6f569518cdcf156e1d7e8e5a83a463cdad2ba0404d3ee74d02d91e0072d28a64",
+      "metrics": {
+        "GAUC": 0.6675962115111979,
+        "nDCG@5": 0.5357241084284722,
+        "primary": 0.601660159969835
+      },
+      "delta_vs_baseline": 6.0159969834994165e-05,
+      "seconds": 20.485289335250854,
+      "est_runtime_sec": 22,
+      "valid_scores_path": "C:\\Users\\brayd\\Desktop\\Personal Projects\\TikTok TechJam\\solutions\\n0008\\valid_scores.npy",
+      "test_scores_path": "C:\\Users\\brayd\\Desktop\\Personal Projects\\TikTok TechJam\\solutions\\n0008\\test_scores.npy"
+    },
+    "n0009": {
+      "action": "draft",
+      "parent_node_id": null,
+      "direction": "sequence",
+      "hypothesis": "Augment a pointwise FM with causal first-order sequence context: the immediately preceding logged video's ID, author, tab, and duration bucket. These fields should capture short-term topic and session continuity through learned previous-item \u00d7 candidate-item interactions that the static baseline cannot represent.",
+      "status": "ok",
+      "code_path": "C:\\Users\\brayd\\Desktop\\Personal Projects\\TikTok TechJam\\solutions\\n0009\\solution.py",
+      "ast_hash": "226ac7e5ead2c27d2873d027a74b077164d4b7325e622a4e30fec81295eb0e80",
+      "metrics": {
+        "GAUC": 0.6534072204348931,
+        "nDCG@5": 0.5294789172721135,
+        "primary": 0.5914430688535033
+      },
+      "delta_vs_baseline": -0.01015693114649674,
+      "seconds": 21.991872787475586,
+      "est_runtime_sec": 42,
+      "valid_scores_path": "C:\\Users\\brayd\\Desktop\\Personal Projects\\TikTok TechJam\\solutions\\n0009\\valid_scores.npy",
+      "test_scores_path": "C:\\Users\\brayd\\Desktop\\Personal Projects\\TikTok TechJam\\solutions\\n0009\\test_scores.npy"
+    },
+    "n0010": {
+      "action": "draft",
+      "parent_node_id": null,
+      "direction": "watchtime",
+      "hypothesis": "Train a single factorization machine to regress the signed log-watchtime margin relative to an empirically learned duration-dependent long-view threshold, rather than treating every positive or negative as equally informative. Dense distance-to-threshold supervision should improve estimates for sparse users and items while retaining the exact long-view sign.",
+      "status": "ok",
+      "code_path": "C:\\Users\\brayd\\Desktop\\Personal Projects\\TikTok TechJam\\solutions\\n0010\\solution.py",
+      "ast_hash": "63b7635a3f152d8a454e4f1fc4f15c259ad1faed0687620e1f177478f8ecef55",
+      "metrics": {
+        "GAUC": 0.6360080077909306,
+        "nDCG@5": 0.5233499160045779,
+        "primary": 0.5796789618977543
+      },
+      "delta_vs_baseline": -0.02192103810224577,
+      "seconds": 8.01839017868042,
+      "est_runtime_sec": 34,
+      "valid_scores_path": "C:\\Users\\brayd\\Desktop\\Personal Projects\\TikTok TechJam\\solutions\\n0010\\valid_scores.npy",
+      "test_scores_path": "C:\\Users\\brayd\\Desktop\\Personal Projects\\TikTok TechJam\\solutions\\n0010\\test_scores.npy"
+    },
+    "n0011": {
+      "action": "improve",
+      "parent_node_id": "n0000",
+      "direction": "loss",
+      "hypothesis": "After ordinary BCE training, apply a small top-of-list pairwise fine-tuning stage only on high-activity users, contrasting each user's currently strongest positives with strongest negatives. This should improve the weak 21\u2013100-impression ranking bucket while retaining the BCE model's stronger global estimation through a fixed 50% logit blend and a validation-gated fallback.",
+      "status": "ok",
+      "code_path": "C:\\Users\\brayd\\Desktop\\Personal Projects\\TikTok TechJam\\solutions\\n0011\\solution.py",
+      "ast_hash": "f556ceb5fcac78533a515ec43a018347b44a511916f20afef0fe0edae4dfe543",
+      "metrics": {
+        "GAUC": 0.6682155309533149,
+        "nDCG@5": 0.5358566381293559,
+        "primary": 0.6020360845413354
+      },
+      "delta_vs_baseline": 0.00043608454133536867,
+      "seconds": 23.806001663208008,
+      "est_runtime_sec": 30,
+      "valid_scores_path": "C:\\Users\\brayd\\Desktop\\Personal Projects\\TikTok TechJam\\solutions\\n0011\\valid_scores.npy",
+      "test_scores_path": "C:\\Users\\brayd\\Desktop\\Personal Projects\\TikTok TechJam\\solutions\\n0011\\test_scores.npy"
+    }
+  },
+  "order": [
+    "n0000",
+    "n0001",
+    "n0002",
+    "n0003",
+    "n0004",
+    "n0005",
+    "n0006",
+    "n0007",
+    "n0008",
+    "n0009",
+    "n0010",
+    "n0011"
+  ],
+  "scored_primaries": [
+    0.6014769439448342,
+    0.5920499681334384,
+    0.5966921920224563,
+    0.5864768262923805,
+    0.5992161489857626,
+    0.6013721597863331,
+    0.6007300813593697,
+    0.6014769439448342,
+    0.601660159969835,
+    0.5914430688535033,
+    0.5796789618977543,
+    0.6020360845413354
+  ],
+  "scored_directions": [
+    "baseline",
+    "loss",
+    "multitask",
+    "time_shift",
+    "loss",
+    "arch",
+    "arch",
+    "ensemble",
+    "time_shift",
+    "sequence",
+    "watchtime",
+    "loss"
+  ],
+  "known_ast_hashes": [
+    "ded61833900b687799d30ed5a2b49b73f423c2de1ee480c8e31790d18d5c3768",
+    "e10ce1ba76b84e87bef07ee7f7384a1ad4665f653ff4c542f441c7507f01c392",
+    "eaa60d504ac0241fcda5eef633128f8bf752788fabf4bd28cbaec66912b039af",
+    "04c95ba343e868b66bcb286eb65bfcbd46f0cb0e0fd856460f5c28626ea71db9",
+    "b9407aaf008873dcd9dee247563c36cb745b9c16329b05654cc74f0ec9f8f016",
+    "e537f6fc61512075606c0cbfb277830c68f4bcf957c69172a0b05fc7623a54aa",
+    "37a131dd97933a7bca09d36d6bb5cd1295e47d80031adcb02362f7e1a16b02b0",
+    "6f569518cdcf156e1d7e8e5a83a463cdad2ba0404d3ee74d02d91e0072d28a64",
+    "226ac7e5ead2c27d2873d027a74b077164d4b7325e622a4e30fec81295eb0e80",
+    "63b7635a3f152d8a454e4f1fc4f15c259ad1faed0687620e1f177478f8ecef55",
+    "f556ceb5fcac78533a515ec43a018347b44a511916f20afef0fe0edae4dfe543"
+  ],
+  "best_node_id": "n0011",
+  "best_primary": 0.6020360845413354,
+  "second_best_node_id": "n0008",
+  "second_best_primary": 0.601660159969835,
+  "total_iterations": 11,
+  "scored_iterations": 12,
+  "wall_seconds": 4340.9207808971405,
+  "cost_usd": 1.8826541599999997,
+  "direction_stats": {
+    "loss": {
+      "attempts": 3,
+      "best_primary": 0.6020360845413354,
+      "consecutive_misses": 3
+    },
+    "multitask": {
+      "attempts": 1,
+      "best_primary": 0.5966921920224563,
+      "consecutive_misses": 1
+    },
+    "time_shift": {
+      "attempts": 2,
+      "best_primary": 0.601660159969835,
+      "consecutive_misses": 2
+    },
+    "arch": {
+      "attempts": 2,
+      "best_primary": 0.6013721597863331,
+      "consecutive_misses": 2
+    },
+    "ensemble": {
+      "attempts": 1,
+      "best_primary": 0.6014769439448342,
+      "consecutive_misses": 1
+    },
+    "sequence": {
+      "attempts": 1,
+      "best_primary": 0.5914430688535033,
+      "consecutive_misses": 1
+    },
+    "watchtime": {
+      "attempts": 1,
+      "best_primary": 0.5796789618977543,
+      "consecutive_misses": 1
+    }
+  },
+  "converged": true,
+  "convergence_trigger": "converged",
+  "manual_interventions": 0,
+  "convergence_detail": {
+    "converged": true,
+    "reason": "plateau",
+    "scored_iterations": 12,
+    "best_before_window": 0.601660159969835,
+    "best_in_window": 0.6020360845413354,
+    "gain": 0.0003759245715003745,
+    "epsilon": 0.002,
+    "N": 3,
+    "window": [
+      0.5914430688535033,
+      0.5796789618977543,
+      0.6020360845413354
+    ],
+    "directions_in_window": [
+      "loss",
+      "sequence",
+      "watchtime"
+    ]
+  }
+}

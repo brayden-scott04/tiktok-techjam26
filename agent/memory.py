@@ -25,25 +25,52 @@ def static_prefix():
 def render_journal(nodes):
     """`nodes` is a list of dicts, oldest first, each with at minimum:
     node_id, parent_node_id, action, direction, hypothesis, status,
-    metrics (or None), delta_vs_baseline (or None), seconds, est_runtime_sec.
+    metrics (or None), delta_vs_baseline (or None), seconds, est_runtime_sec,
+    expected_effect (or None), calibration_error (or None).
     """
     if not nodes:
         return "(no prior iterations yet -- this is the first one)"
 
-    lines = ["| node | parent | action | direction | hypothesis | primary | delta | status | time (est) |",
-             "|---|---|---|---|---|---|---|---|---|"]
+    lines = ["| node | parent | action | direction | hypothesis | primary | delta | pred Δ | calib err | status | time (est) |",
+             "|---|---|---|---|---|---|---|---|---|---|---|"]
     for n in nodes:
         hyp = (n.get("hypothesis") or "")[:80]
         primary = f"{n['metrics']['primary']:.4f}" if n.get("metrics") else "-"
         delta = f"{n['delta_vs_baseline']:+.4f}" if n.get("delta_vs_baseline") is not None else "-"
+        ee = n.get("expected_effect") or {}
+        pred = f"{ee['delta']:+.4f}" if ee.get("delta") is not None else "-"
+        calib = f"{n['calibration_error']:+.4f}" if n.get("calibration_error") is not None else "-"
         secs = n.get("seconds")
         est = n.get("est_runtime_sec")
         time_str = f"{secs:.0f}s ({est:.0f}s est)" if secs is not None else "-"
         lines.append(
             f"| {n['node_id']} | {n.get('parent_node_id', '-')} | {n['action']} | {n.get('direction', '-')} "
-            f"| {hyp} | {primary} | {delta} | {n['status']} | {time_str} |"
+            f"| {hyp} | {primary} | {delta} | {pred} | {calib} | {n['status']} | {time_str} |"
         )
     return "\n".join(lines)
+
+
+def render_calibration_summary(recent_pred_actual_pairs):
+    """`recent_pred_actual_pairs` is a list of (predicted_delta, calibration_error)
+    tuples for the last few scored LLM nodes. calibration_error = actual_gain -
+    predicted_delta, so a negative mean error means the model has been
+    overconfident (actual gains fall short of what it predicted)."""
+    if len(recent_pred_actual_pairs) < 2:
+        return ""
+    preds = [p for p, _ in recent_pred_actual_pairs]
+    errs = [e for _, e in recent_pred_actual_pairs]
+    mean_pred = sum(preds) / len(preds)
+    mean_err = sum(errs) / len(errs)
+    if mean_err < -0.0005:
+        verdict = "you have been overconfident -- actual gains have fallen short of your predictions"
+    elif mean_err > 0.0005:
+        verdict = "you have been underconfident -- actual gains have exceeded your predictions"
+    else:
+        verdict = "your predictions have been reasonably well-calibrated"
+    return (
+        f"Calibration over your last {len(recent_pred_actual_pairs)} predictions: "
+        f"mean predicted Δ={mean_pred:+.4f}, mean calibration error={mean_err:+.4f} -> {verdict}."
+    )
 
 
 def render_budget_block(state):
@@ -75,12 +102,20 @@ def build_draft_messages(journal_md, diagnostics_md, budget_md, used_directions)
     ]
 
 
-def build_improve_messages(journal_md, diagnostics_md, budget_md, parent_code, parent_hypothesis):
+def build_improve_messages(journal_md, diagnostics_md, budget_md, parent_code, parent_hypothesis, comparison_md=None):
     action_prompt = _read_prompt("improve.md")
+    comparison_section = ""
+    if comparison_md:
+        comparison_section = (
+            f"# Why this parent wasn't adopted as the leading approach last time\n"
+            f"This is the exact bucketed comparison against whatever was the best node at the time this parent "
+            f"was scored. Use it to target a specific, informed fix rather than guessing.\n\n{comparison_md}\n\n"
+        )
     user_content = (
         f"# Journal so far\n{journal_md}\n\n"
         f"# Diagnostics on the current best node\n{diagnostics_md}\n\n"
         f"# Budget\n{budget_md}\n\n"
+        f"{comparison_section}"
         f"# Parent solution (original hypothesis: {parent_hypothesis})\n```python\n{parent_code}\n```\n\n"
         f"---\n\n{action_prompt}"
     )

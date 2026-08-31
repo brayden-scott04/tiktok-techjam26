@@ -14,5 +14,6 @@ artifacts/final_result.json
 artifacts/submission_test.csv
 solutions/n0*/
 !solutions/n0000/
+smoke_test_demo_archive/
 .pytest_cache/
 *.egg-info/
