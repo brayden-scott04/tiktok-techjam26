@@ -1,0 +1,70 @@
+{
+  "build_cache": {
+    "split_sizes": {
+      "train": 1141112,
+      "valid": 124909,
+      "test": 170588
+    },
+    "expected_split_sizes": {
+      "train": 1141112,
+      "valid": 124909,
+      "test": 170588
+    },
+    "split_sizes_ok": true,
+    "kit_equivalence_ok": true,
+    "build_seconds": 7.534909725189209,
+    "verify_seconds": 4.16725754737854,
+    "n_users": 26211,
+    "n_videos": 7539,
+    "n_authors": 6483,
+    "n_tabs": 16,
+    "sanitizer_self_check_ok": true,
+    "sanitizer_features_unchanged_ok": true,
+    "eval_valid_server_matches_direct_ok": true,
+    "eval_valid_direct_primary": 0.4808670896827917,
+    "eval_valid_via_server_primary": 0.4808670896827917
+  },
+  "reproduce_baseline": {
+    "random_test_primary_seeds_0_4": [
+      0.4757,
+      0.4754,
+      0.4764,
+      0.4751,
+      0.474
+    ],
+    "random_test_primary_mean": 0.4753,
+    "random_expected": "0.4753 +/- 0.001",
+    "random_ok": true,
+    "pop_valid_primary": 0.5807,
+    "pop_test_primary": 0.5715,
+    "pop_expected_test": "0.5715 +/- 0.002",
+    "pop_ok": true,
+    "fm_valid_primary_seeds_0_4": [
+      0.6015,
+      0.6018,
+      0.6011,
+      0.6015,
+      0.602
+    ],
+    "fm_valid_primary_mean": 0.6016,
+    "fm_test_primary_seeds_0_4": [
+      0.5953,
+      0.5948,
+      0.5948,
+      0.595,
+      0.5931
+    ],
+    "fm_test_primary_mean": 0.5946,
+    "fm_test_primary_std": 0.00077,
+    "fm_expected_valid": "0.6016",
+    "fm_expected_test": "0.5946 +/- 0.002, std ~0.0008",
+    "fm_ok": true,
+    "note": "All four organizer-published numbers (random, pop, FM valid, FM test, and the FM seed std) reproduced to the decimal. This is the Phase 1 hard gate; harness/evaluation pipeline is trustworthy."
+  },
+  "encoding_check": {
+    "locale_preferred_encoding": "cp1252",
+    "build_cache_with_utf8_flag_ok": true,
+    "build_cache_without_utf8_flag_ok": true,
+    "note": "cp1252 is confirmed the default on this machine, but all KuaiRand-Pure CSVs are pure ASCII, so cp1252 decodes them without error either way -- the risk was theoretical for this dataset. We still standardize on `python -X utf8` / PYTHONUTF8=1 for every invocation as zero-cost defensive practice, since the repo's own vendored kit/ comments are Chinese-language UTF-8."
+  }
+}

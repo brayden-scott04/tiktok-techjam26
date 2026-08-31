@@ -1,0 +1,39 @@
+{
+  "convergence": {
+    "epsilon": 0.002,
+    "N": 3,
+    "min_scored_iterations": 12,
+    "note": "Cumulative-window rule per organizer FAQ 2.9: converged when best(primary over last N scored iterations) - best(primary over everything before that window) <= epsilon. Crashed/debug iterations do not advance or reset the window. min_scored_iterations is a team-declared floor, permitted by the same FAQ, fixed here before the run."
+  },
+  "caps": {
+    "max_total_iterations": 50,
+    "max_wall_seconds": 21600,
+    "max_cost_usd": 40.0,
+    "oracle_proximity_alarm": 0.80
+  },
+  "seeds": {
+    "candidate_seeds": [0, 1, 2],
+    "accept_requires_mean_gain_over_epsilon": true
+  },
+  "hint_level": 0,
+  "sandbox": {
+    "smoke_timeout_sec": 120,
+    "full_timeout_sec": 900,
+    "max_full_timeout_sec": 1800,
+    "max_rss_mb": 12000,
+    "eval_valid_call_cap": 200
+  },
+  "tree": {
+    "explore_drafts": 4,
+    "max_children_per_node": 3,
+    "plateau_same_direction_misses": 2,
+    "plateau_min_gain": 0.001,
+    "epsilon_greedy_revisit_p": 0.15
+  },
+  "debug": {
+    "max_debug_attempts_per_node": 2,
+    "max_consecutive_failed_nodes": 4
+  },
+  "baseline_valid_primary": 0.6016,
+  "baseline_test_primary": 0.5946
+}

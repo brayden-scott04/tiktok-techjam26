@@ -1,0 +1,1 @@
+Your previous response did not conform to the required JSON schema. Re-emit the exact same content (same hypothesis, same code, same everything) in the correct schema shape. Do not change the substance of your answer, only its formatting.

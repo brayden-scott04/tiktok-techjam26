@@ -1,0 +1,10 @@
+{
+  "_comment": "Verified against the live account via scripts/verify_openai.py and scripts/probe_openai_api.py on 2026-08-31. gpt-5.6 family: sol=flagship reasoning, terra=mid, luna=cost-optimized. All three confirmed present in the account's model list and confirmed working with the Responses API's structured-output (text.format.json_schema) path.",
+  "brain": "gpt-5.6-sol",
+  "repair": "gpt-5.6-luna",
+  "fallback": "gpt-5.6-terra",
+  "brain_reasoning_effort": "high",
+  "repair_reasoning_effort": "low",
+  "verified": true,
+  "verified_date": "2026-08-31"
+}

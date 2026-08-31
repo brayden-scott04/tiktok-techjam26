@@ -1,0 +1,20 @@
+{
+  "verify_node0": {
+    "status": "ok",
+    "wall_seconds": 20.53823208808899,
+    "peak_rss_mb": 428.85546875,
+    "eval_calls": 11,
+    "valid_metrics": {
+      "GAUC": 0.6672305987565891,
+      "nDCG@5": 0.5357232891330793,
+      "primary": 0.6014769439448342,
+      "users": 22377,
+      "rows": 124909
+    },
+    "baseline_valid_primary": 0.6016,
+    "diff": 0.00012305605516582663,
+    "tolerance": 0.003,
+    "ok": true,
+    "note": "Not bit-identical to kit.baseline.run_fm by design -- see module docstring. Compared against the organizer-published baseline number instead."
+  }
+}
