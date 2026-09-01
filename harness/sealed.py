@@ -9,11 +9,22 @@ authoritative cache) so a re-run can't be used to peek and retry.
 """
 import json
 import os
+import sys
 
 from kit.evaluate import evaluate as kit_evaluate
-from kit.submit import write_submission, read_submission
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# kit/submit.py is vendored byte-identical from the starter kit, which is
+# written to be run standalone (`cd kit && python submit.py`) -- its own
+# top-level `from data import load, encode` only resolves if kit/ itself is
+# on sys.path, not just the repo root. We fix the import path here rather
+# than touch the vendored file (which is sha256-manifested and must stay
+# byte-identical).
+_KIT_DIR = os.path.join(ROOT, "kit")
+if _KIT_DIR not in sys.path:
+    sys.path.insert(0, _KIT_DIR)
+from kit.submit import write_submission, read_submission  # noqa: E402
 LOCK_PATH = os.path.join(ROOT, "artifacts", ".test_scored")
 
 

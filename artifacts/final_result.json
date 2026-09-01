@@ -1,0 +1,21 @@
+{
+  "best_node_id": "n0011",
+  "valid_metrics": {
+    "GAUC": 0.6682155309533149,
+    "nDCG@5": 0.5358566381293559,
+    "primary": 0.6020360845413354
+  },
+  "test_metrics": {
+    "GAUC": 0.6629869769429362,
+    "nDCG@5": 0.529430349744736,
+    "primary": 0.5962086633438362,
+    "users": 23875,
+    "rows": 170588
+  },
+  "baseline_test": {
+    "GAUC": 0.661,
+    "nDCG@5": 0.5282,
+    "primary": 0.5946
+  },
+  "delta_vs_baseline_test_primary": 0.0016086633438361364
+}

@@ -106,25 +106,33 @@ class LLMClient:
 
         last_exc = None
         t0 = time.time()
+        print(f"[llm] -> {role} ({model_id}) call starting, prompt {prompt_sha256[:10]}...", flush=True)
         for attempt in range(1, max_retries + 1):
             try:
+                t_attempt = time.time()
                 resp = self._client.responses.create(**kwargs)
+                print(f"[llm] <- {role} attempt {attempt} succeeded in {time.time()-t_attempt:.1f}s", flush=True)
                 break
             except (RateLimitError, APIConnectionError, APITimeoutError) as e:
                 last_exc = e
                 wait = min(30, (2 ** attempt) + random.uniform(0, 1))
+                print(f"[llm] {role} attempt {attempt} failed after {time.time()-t_attempt:.1f}s "
+                      f"({type(e).__name__}: {e}); retrying in {wait:.1f}s", flush=True)
                 time.sleep(wait)
                 continue
             except APIStatusError as e:
                 last_exc = e
                 if 500 <= getattr(e, "status_code", 0) < 600:
                     wait = min(30, (2 ** attempt) + random.uniform(0, 1))
+                    print(f"[llm] {role} attempt {attempt} got {e.status_code}; retrying in {wait:.1f}s", flush=True)
                     time.sleep(wait)
                     continue
+                print(f"[llm] {role} attempt {attempt} non-retryable status {e.status_code}", flush=True)
                 raise LLMCallError(f"{role} call failed with non-retryable status {e.status_code}: {e}") from e
         else:
             if role == "brain":
                 self._consecutive_brain_failures += 1
+            print(f"[llm] {role} call FAILED after {max_retries} attempts, {time.time()-t0:.1f}s total", flush=True)
             raise LLMCallError(f"{role} call failed after {max_retries} attempts: {last_exc}") from last_exc
 
         if role == "brain":

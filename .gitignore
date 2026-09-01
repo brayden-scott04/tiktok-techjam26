@@ -6,14 +6,9 @@ __pycache__/
 workspace/
 artifacts/cache/
 artifacts/nodes/
-artifacts/*.jsonl
 artifacts/state.json
-artifacts/report.md
-artifacts/results_table.md
-artifacts/final_result.json
-artifacts/submission_test.csv
-solutions/n0*/
-!solutions/n0000/
+artifacts/.test_scored
+solutions/**/_candidate_tmp.py
 smoke_test_demo_archive/
 .pytest_cache/
 *.egg-info/

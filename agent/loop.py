@@ -347,9 +347,12 @@ class AgentLoop:
         events = []
         usages = []
         t_iter0 = time.time()
+        node_num_preview = self.state["total_iterations"] + 1
+        print(f"[loop] iteration {node_num_preview}: action={action} parent={parent_id}", flush=True)
 
         candidates = []
         for i in range(self.n_candidates):
+            print(f"[loop] iteration {node_num_preview}: generating candidate {i+1}/{self.n_candidates}", flush=True)
             try:
                 parsed, usage = self._call_llm_for_candidate(action, parent_id)
                 usages.append(usage)
@@ -366,6 +369,7 @@ class AgentLoop:
             for e in sub_events:
                 e["candidate"] = i
                 events.append(e)
+            print(f"[loop] iteration {node_num_preview}: candidate {i+1} validation -> {status}", flush=True)
             candidates.append(
                 {"parsed": parsed, "code": final_code, "ast_hash": ast_hash, "status": status, "direction": parsed["direction"]}
             )
@@ -390,12 +394,14 @@ class AgentLoop:
                     fh.write(candidates[0]["code"])
         else:
             full_timeout = self.sandbox_cfg["full_timeout_sec"]
+            print(f"[loop] iteration {node_num_preview}: quick seed-0 check on {len(validated)} validated candidate(s)", flush=True)
             quick = []
             for c in validated:
                 tmp_path = os.path.join(node_dir, "_candidate_tmp.py")
                 with open(tmp_path, "w", encoding="utf-8") as fh:
                     fh.write(c["code"])
                 r0 = self._run_full(tmp_path, seed=0, timeout_sec=full_timeout)
+                print(f"[loop] iteration {node_num_preview}: candidate seed-0 -> status={r0.status} seconds={r0.seconds:.1f}", flush=True)
                 quick.append((c, r0))
 
             ok_quick = [(c, r) for c, r in quick if r.status == "ok"]
@@ -416,9 +422,12 @@ class AgentLoop:
                 with open(code_path, "w", encoding="utf-8") as fh:
                     fh.write(best_c["code"])
 
+                print(f"[loop] iteration {node_num_preview}: winner selected, running seeds 1,2 for confirmation", flush=True)
                 r1 = self._run_full(code_path, seed=1, timeout_sec=full_timeout)
                 r2 = self._run_full(code_path, seed=2, timeout_sec=full_timeout)
                 metrics, _ = self._mean_metrics([best_r0, r1, r2])
+                if metrics:
+                    print(f"[loop] iteration {node_num_preview}: confirmed primary={metrics['primary']:.4f} (std={metrics['primary_std']:.4f}, n_seeds_ok={metrics['n_seeds_ok']})", flush=True)
                 seconds = sum(r.seconds for _, r in quick) + r1.seconds + r2.seconds
 
                 if metrics is None:
