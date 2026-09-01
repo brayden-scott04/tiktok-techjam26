@@ -156,7 +156,7 @@ searching with a strengthened search process (see below) before finalizing.
   from 12 once real per-iteration cost/speed was known to be far cheaper
   than budgeted — $0.17 and ~7 min per iteration, not the $1-2/10-15min
   assumed when 12 was first set)
-- Window semantics are cumulative, exactly as FAQ 2.9 specifies:
+- Window semantics are cumulative,
   `best(last N scored) - best(everything before) <= epsilon`
 - Crashed/debug iterations count toward the 50-iteration cap but never
   advance or reset the convergence window
@@ -240,9 +240,7 @@ scoring — handing the agent its own answer key would hollow that out.
   scheme — a deliberate scope cut for the time available, not an oversight.
 - No held-out slice of validation exists for an independent overfitting
   check: valid labels are withheld from the sandbox by design (the same
-  mechanism that makes the leakage guarantee structural), and the
-  organizers' own FAQ 2.9.2 rules out `log_random` as an alternative
-  unbiased check (it overlaps the test window). Valid-vs-test primary gap
+  mechanism that makes the leakage guarantee structural). Valid-vs-test primary gap
   is reported honestly rather than hidden (and in this run, favorably —
   test transfer *improved* on validation rather than eroding it).
 - numpy-only rules out sequence models with real per-user attention at any
