@@ -24,9 +24,27 @@ def _scored(records):
     return [r for r in records if r.get("metrics")]
 
 
-def render_results_table(records, test_metrics=None):
+def render_results_table(records, test_metrics=None, best_node_id=None, best_valid_metrics=None):
+    """`best_node_id`/`best_valid_metrics` MUST be the same officially-selected
+    node (state["best_node_id"] / state["nodes"][best_node_id]["metrics"])
+    used for sealed test scoring -- NOT recomputed independently from
+    run_log.jsonl. An earlier version of this function picked whichever
+    record had the single highest raw primary across the whole run, which
+    silently disagreed with the node scripts/final_test_score.py actually
+    sealed-scored (the raw max ignores that promotion requires a CONFIRMED
+    epsilon-clearing gain, so the highest single record and the officially
+    promoted "best" are not the same thing in general). Falls back to the
+    naive max-primary approach only if the caller doesn't supply the
+    official selection (e.g. a bare records-only call with no state access).
+    """
     scored = _scored(records)
-    best = max(scored, key=lambda r: r["metrics"]["primary"], default=None)
+    if best_node_id is not None and best_valid_metrics is not None:
+        best_id, best_metrics = best_node_id, best_valid_metrics
+    else:
+        best = max(scored, key=lambda r: r["metrics"]["primary"], default=None)
+        best_id = best["node_id"] if best else None
+        best_metrics = best["metrics"] if best else None
+
     lines = [
         "| | valid GAUC | valid nDCG@5 | valid primary | test GAUC | test nDCG@5 | test primary | Δ primary vs baseline |",
         "|---|---|---|---|---|---|---|---|",
@@ -34,22 +52,22 @@ def render_results_table(records, test_metrics=None):
         f"| item popularity | - | - | {spec.POP_VALID_PRIMARY:.4f} | - | - | {spec.POP_TEST_PRIMARY:.4f} | {spec.POP_TEST_PRIMARY - spec.BASELINE_TEST_PRIMARY:+.4f} |",
         f"| official FM baseline | {spec.BASELINE_VALID['GAUC']:.4f} | {spec.BASELINE_VALID['nDCG@5']:.4f} | {spec.BASELINE_VALID_PRIMARY:.4f} | {spec.BASELINE_TEST['GAUC']:.4f} | {spec.BASELINE_TEST['nDCG@5']:.4f} | {spec.BASELINE_TEST_PRIMARY:.4f} | 0.0000 |",
     ]
-    if best:
-        m = best["metrics"]
+    if best_id is not None:
+        m = best_metrics
         if test_metrics:
             tline = (
-                f"| **our converged best ({best['node_id']})** | {m['GAUC']:.4f} | {m['nDCG@5']:.4f} | {m['primary']:.4f} "
+                f"| **our converged best ({best_id})** | {m['GAUC']:.4f} | {m['nDCG@5']:.4f} | {m['primary']:.4f} "
                 f"| {test_metrics['GAUC']:.4f} | {test_metrics['nDCG@5']:.4f} | {test_metrics['primary']:.4f} "
                 f"| {test_metrics['primary'] - spec.BASELINE_TEST_PRIMARY:+.4f} |"
             )
         else:
             tline = (
-                f"| **our best so far ({best['node_id']})** | {m['GAUC']:.4f} | {m['nDCG@5']:.4f} | {m['primary']:.4f} "
+                f"| **our best so far ({best_id})** | {m['GAUC']:.4f} | {m['nDCG@5']:.4f} | {m['primary']:.4f} "
                 f"| (not yet sealed-scored) | | | |"
             )
         lines.append(tline)
     oracle_frac = None
-    if best and test_metrics:
+    if best_id is not None and test_metrics:
         headroom = spec.ORACLE_TEST_PRIMARY - spec.BASELINE_TEST_PRIMARY
         oracle_frac = (test_metrics["primary"] - spec.BASELINE_TEST_PRIMARY) / headroom if headroom else None
     if oracle_frac is not None:
@@ -112,17 +130,24 @@ def render_resource_summary(records):
         f"- Total iterations: {n_iter} (scored: {n_scored})\n"
         f"- Total LLM tokens: {total_in:,} in + {total_out:,} out = {total_in + total_out:,}\n"
         f"- Total cost: ${total_cost:.2f}\n"
+        f"- GPU-hours: 0 (numpy-only pipeline, CPU only, no GPU used at any stage)\n"
         f"- Manual interventions: {n_interventions}\n"
     )
 
 
-def render_report(run_log_path, out_path, results_table_path=None, test_metrics=None):
+def render_report(run_log_path, out_path, results_table_path=None, test_metrics=None,
+                   best_node_id=None, best_valid_metrics=None):
+    """best_node_id/best_valid_metrics should be the caller's
+    state["best_node_id"] / state["nodes"][best_node_id]["metrics"] -- the
+    same officially-selected node used for (or about to be used for) sealed
+    test scoring. See render_results_table's docstring for why this must not
+    be recomputed independently from run_log.jsonl."""
     records = load_run_log(run_log_path)
     sections = [
         "# Agent Run Report\n",
         render_resource_summary(records),
         "\n## Results\n",
-        render_results_table(records, test_metrics=test_metrics),
+        render_results_table(records, test_metrics=test_metrics, best_node_id=best_node_id, best_valid_metrics=best_valid_metrics),
         "\n## Score trajectory\n",
         render_trajectory(records),
         "\n## Directions explored\n",
@@ -135,7 +160,7 @@ def render_report(run_log_path, out_path, results_table_path=None, test_metrics=
         fh.write(report)
     if results_table_path:
         with open(results_table_path, "w", encoding="utf-8") as fh:
-            fh.write(render_results_table(records, test_metrics=test_metrics))
+            fh.write(render_results_table(records, test_metrics=test_metrics, best_node_id=best_node_id, best_valid_metrics=best_valid_metrics))
     return report
 
 

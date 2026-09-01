@@ -76,7 +76,8 @@ def main():
     run_log_path = os.path.join(ROOT, "artifacts", "run_log.jsonl")
     report_path = os.path.join(ROOT, "artifacts", "report.md")
     table_path = os.path.join(ROOT, "artifacts", "results_table.md")
-    render_report(run_log_path, report_path, table_path, test_metrics=metrics)
+    render_report(run_log_path, report_path, table_path, test_metrics=metrics,
+                  best_node_id=best_node_id, best_valid_metrics=best_node["metrics"])
     print(f"\nWrote {report_path} and {table_path}")
 
 

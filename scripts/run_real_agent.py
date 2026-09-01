@@ -55,7 +55,9 @@ def main():
 
     report_path = os.path.join(ROOT, "artifacts", "report.md")
     table_path = os.path.join(ROOT, "artifacts", "results_table.md")
-    render_report(loop.run_log_path, report_path, table_path)
+    best_id = loop.state["best_node_id"]
+    best_metrics = loop.state["nodes"][best_id]["metrics"] if best_id else None
+    render_report(loop.run_log_path, report_path, table_path, best_node_id=best_id, best_valid_metrics=best_metrics)
     print(f"Wrote {report_path} and {table_path} (test columns pending scripts.final_test_score)")
 
 

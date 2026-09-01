@@ -24,9 +24,11 @@ baseline's own measured 5-seed noise, this is **borderline significant**
 real, directionally consistent improvement, not proven beyond reasonable
 doubt. See "Known limitations" for the full statistical picture.
 
-**Resource usage to reach this result:** 24 iterations (of the 50-iteration
-cap), $6.11 spent (of a $40 budget), ~2.95 hours wall-clock (of the 6-hour
-ceiling), **0 manual interventions** across the entire scored run.
+**Resource usage to reach this result:** 24 scored iterations (26 total
+including debug/repair attempts, of the 50-iteration cap), **582,551 LLM
+tokens** (275,742 in + 306,809 out), $6.11 spent (of a $40 budget), ~2.95
+hours wall-clock (of the 6-hour ceiling), **0 GPU-hours** (numpy-only, CPU
+only), **0 manual interventions** across the entire scored run.
 
 ## Architecture
 
