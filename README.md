@@ -9,6 +9,25 @@ intervention.
 **This is not a submission for a good recommender model. It is a submission
 for the agent that builds one.**
 
+## Results
+
+| | valid GAUC | valid nDCG@5 | valid primary | test GAUC | test nDCG@5 | test primary | Δ primary vs baseline |
+|---|---|---|---|---|---|---|---|
+| official FM baseline | 0.6674 | 0.5357 | 0.6016 | 0.6610 | 0.5282 | 0.5946 | — |
+| **our converged best (n0011)** | 0.6682 | 0.5359 | **0.6020** | 0.6630 | 0.5294 | **0.5962** | **+0.0016** |
+
+The sealed hidden-test delta (+0.0016) is larger than the validation-side
+delta (+0.0004) — a pleasant surprise, since test transfer usually erodes a
+gain rather than growing it. Treated honestly: at z≈1.84 against the
+baseline's own measured 5-seed noise, this is **borderline significant**
+(two-tailed p≈0.066, just short of the conventional 0.05 threshold) — a
+real, directionally consistent improvement, not proven beyond reasonable
+doubt. See "Known limitations" for the full statistical picture.
+
+**Resource usage to reach this result:** 24 iterations (of the 50-iteration
+cap), $6.11 spent (of a $40 budget), ~2.95 hours wall-clock (of the 6-hour
+ceiling), **0 manual interventions** across the entire scored run.
+
 ## Architecture
 
 ```
@@ -152,6 +171,29 @@ scoring — handing the agent its own answer key would hollow that out.
 
 ## Known limitations
 
+- **The result is borderline-significant, not proven.** z≈1.84, p≈0.066 on
+  the sealed test delta. We report this plainly rather than rounding it up
+  to "significant" — it's a real, consistent, positive signal, and it is
+  also small enough that we would not be surprised if a second independent
+  run landed on the other side of p=0.05.
+- **The anti-stall direction-diversity property didn't hold in practice.**
+  The design assumed the plateau-driven branch-switch would keep the final
+  convergence window spanning ≥2 distinct research directions. In the
+  actual run, all 9 direction categories were exhausted by iteration 13,
+  after which the policy's documented fallback ("keep improving the current
+  best regardless of staleness") took over for the rest of the run — so the
+  final convergence window (n0022–n0024) was entirely within the `loss`
+  direction. The convergence itself is still legitimate (11 consecutive
+  `loss`-direction refinements independently landed in a tight 0.6019–0.6025
+  band across 33 individual seed runs, a much stronger plateau signal than
+  a single fluke), but the specific "diverse-window" guarantee we designed
+  for should be read as "usually holds," not "always holds."
+- **A couple of iterations showed exactly zero seed variance**
+  (`primary_std = 0.0000` across all 3 seeds), which is unusual enough to be
+  worth a second look — it may indicate the generated solution wasn't
+  actually using the random seed anywhere (e.g. a fixed initialization), not
+  that the result is more reliable than normal. Not investigated further
+  given time constraints; flagged here for transparency.
 - The node-selection policy (best/second-best/retry-pool + per-direction
   staleness tracking) is a simplified version of the originally planned UCB
   scheme — a deliberate scope cut for the time available, not an oversight.
@@ -160,11 +202,17 @@ scoring — handing the agent its own answer key would hollow that out.
   mechanism that makes the leakage guarantee structural), and the
   organizers' own FAQ 2.9.2 rules out `log_random` as an alternative
   unbiased check (it overlaps the test window). Valid-vs-test primary gap
-  is reported honestly rather than hidden.
+  is reported honestly rather than hidden (and in this run, favorably —
+  test transfer *improved* on validation rather than eroding it).
 - numpy-only rules out sequence models with real per-user attention at any
   serious scale within the sandbox's timeout budget; some promising
   directions may be genuinely time-bound rather than idea-bound.
+- The first phase of this run (12 iterations, floor=12) converged on a
+  result later shown to be statistical noise (z≈0.38, p≈0.70) before the
+  search process was strengthened and continued — see "Convergence policy"
+  above. Disclosed as two declared phases rather than presented as a single
+  clean run.
 
 ## Team
 
-(fill in before submission)
+Solo submission — Brayden Scott.
