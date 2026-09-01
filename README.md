@@ -254,4 +254,4 @@ scoring — handing the agent its own answer key would hollow that out.
 
 ## Team
 
-Solo submission — Brayden Scott.
+Solo submission — Brayden Scott Chen.
