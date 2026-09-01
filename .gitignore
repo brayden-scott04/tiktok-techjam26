@@ -8,6 +8,7 @@ artifacts/cache/
 artifacts/nodes/
 artifacts/state.json
 artifacts/.test_scored
+artifacts/data_manifest.json
 solutions/**/_candidate_tmp.py
 smoke_test_demo_archive/
 .pytest_cache/

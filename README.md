@@ -62,12 +62,20 @@ not assumed from documentation or pre-cutoff knowledge.
 
 ## Setup
 
+Requires **Python 3.14+** (older versions may work but are untested; the
+data-fetch script specifically needs Python 3.12+ for its `tarfile` API) and
+an OpenAI API key.
+
 ```bash
+git clone https://github.com/brayden-scott04/tiktok-techjam26.git
+cd tiktok-techjam26
+
 pip install -r requirements.txt
-cp .env.example .env   # fill in OPENAI_API_KEY
-python -X utf8 -m scripts.fetch_data          # downloads + extracts KuaiRand-Pure outside the repo
+cp .env.example .env   # then open .env and fill in OPENAI_API_KEY
+python -X utf8 -m scripts.fetch_data          # downloads + extracts KuaiRand-Pure outside the repo (~50MB)
 python -X utf8 -m scripts.build_cache         # builds + verifies the authoritative and sanitized caches
 python -X utf8 -m scripts.verify_node0        # confirms the ported baseline reproduces 0.6016
+python -X utf8 -m pytest tests/ --ignore=tests/test_runner.py -q   # 48 fast tests, should all pass
 ```
 
 `-X utf8` (or `PYTHONUTF8=1`) is required on Windows: this machine's default
@@ -78,7 +86,20 @@ whose own comments are UTF-8 Chinese.)
 
 ## Reproducing the baseline
 
-All four organizer-published numbers reproduce exactly:
+All four organizer-published numbers reproduce exactly. The kit is vendored
+to run standalone from inside `kit/`, exactly as the starter kit's own README
+describes:
+
+```bash
+# grab the path scripts.fetch_data printed at the end (also saved in artifacts/data_manifest.json)
+export KR_DATA_ROOT="$(python -c "import json; print(json.load(open('artifacts/data_manifest.json'))['data_dir'])")"
+
+cd kit
+for s in 0 1 2 3 4; do python -X utf8 baseline.py --model random --seed $s --data_dir "$KR_DATA_ROOT"; done
+python -X utf8 baseline.py --model pop --data_dir "$KR_DATA_ROOT"
+for s in 0 1 2 3 4; do python -X utf8 baseline.py --model fm --seed $s --data_dir "$KR_DATA_ROOT"; done
+cd ..
+```
 
 | | GAUC | nDCG@5 | primary |
 |---|---|---|---|
@@ -89,10 +110,28 @@ All four organizer-published numbers reproduce exactly:
 
 ## Running the agent
 
+**Step 1 — mandatory sanity check, not optional.** Before spending any real
+budget, confirm the whole pipeline actually works end to end:
+
 ```bash
-python -X utf8 -m scripts.smoke_agent          # 3 cheap iterations, subsampled -- run this first
-python -X utf8 -m scripts.run_real_agent       # the real run: up to 50 iterations, 6h, $40 ceiling, resumable
-python -X utf8 -m scripts.final_test_score     # sealed, one-shot hidden-test scoring -- run once, after convergence
+python -X utf8 -m scripts.smoke_agent          # 3 cheap iterations, subsampled data, well under $1
+```
+
+**Step 2 — the real run. This spends real money and takes real time** — up
+to $40 and 6 hours against your OpenAI account, though a typical run
+converges well before either cap (ours used $6.11 and ~3h). It's resumable
+if interrupted (re-run the same command; it picks up from `artifacts/state.json`).
+
+```bash
+python -X utf8 -m scripts.run_real_agent
+```
+
+**Step 3 — sealed test scoring, once, after convergence.** This is a
+one-shot operation (it locks after the first call) — don't run it until
+you're satisfied with the validation-side result.
+
+```bash
+python -X utf8 -m scripts.final_test_score
 ```
 
 ## Convergence policy (declared, per organizer FAQ 2.9)

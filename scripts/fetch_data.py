@@ -71,6 +71,22 @@ def verify(data_dir):
         raise SystemExit(f"missing expected files after extraction: {missing}")
 
 
+def _write_manifest(data_dir, archive_size_bytes, archive_sha256):
+    """Always writes artifacts/data_manifest.json, even on the
+    already-present fast path, since README instructions (and anyone
+    scripting against this) rely on the file existing after any successful
+    run of this script, not just a fresh download."""
+    manifest = {
+        "url": URL,
+        "archive_size_bytes": archive_size_bytes,
+        "archive_sha256": archive_sha256,
+        "data_dir": data_dir,
+    }
+    os.makedirs(os.path.join(ROOT, "artifacts"), exist_ok=True)
+    with open(os.path.join(ROOT, "artifacts", "data_manifest.json"), "w", encoding="utf-8") as fh:
+        json.dump(manifest, fh, indent=2)
+
+
 def main():
     target_dir = _default_target_dir()
     data_dir = os.path.join(target_dir, "KuaiRand-Pure", "data")
@@ -79,6 +95,7 @@ def main():
         try:
             verify(data_dir)
             print(f"KuaiRand-Pure already present and complete at {data_dir}")
+            _write_manifest(data_dir, archive_size_bytes=None, archive_sha256=None)
             return
         except SystemExit:
             print("existing extraction incomplete, re-downloading/extracting...")
@@ -93,9 +110,7 @@ def main():
     extract(archive_path, target_dir)
     verify(data_dir)
 
-    manifest = {"url": URL, "archive_size_bytes": size, "archive_sha256": digest, "data_dir": data_dir}
-    with open(os.path.join(ROOT, "artifacts", "data_manifest.json"), "w", encoding="utf-8") as fh:
-        json.dump(manifest, fh, indent=2)
+    _write_manifest(data_dir, archive_size_bytes=size, archive_sha256=digest)
     print(f"done: {data_dir}")
     print(f"set KR_DATA_ROOT={data_dir} in your .env if it differs from the current setting")
 
