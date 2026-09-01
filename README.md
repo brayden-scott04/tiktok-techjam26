@@ -1,8 +1,8 @@
 # Autonomous ML Research Agent — KuaiRand-Pure
 
 TikTok TechJam 2026, Track 2. An agent that autonomously runs the ML research
-loop — read the problem, inspect data, engineer features, train, evaluate,
-reflect, iterate — on the KuaiRand-Pure recommender benchmark, driving the
+loop: read the problem, inspect data, engineer features, train, evaluate,
+reflect, iterate on the KuaiRand-Pure recommender benchmark, driving the
 validation score above the organizers' official baseline with minimal human
 intervention.
 
@@ -17,10 +17,10 @@ for the agent that builds one.**
 | **our converged best (n0011)** | 0.6682 | 0.5359 | **0.6020** | 0.6630 | 0.5294 | **0.5962** | **+0.0016** |
 
 The sealed hidden-test delta (+0.0016) is larger than the validation-side
-delta (+0.0004) — a pleasant surprise, since test transfer usually erodes a
+delta (+0.0004), a pleasant surprise, since test transfer usually erodes a
 gain rather than growing it. Treated honestly: at z≈1.84 against the
 baseline's own measured 5-seed noise, this is **borderline significant**
-(two-tailed p≈0.066, just short of the conventional 0.05 threshold) — a
+(two-tailed p≈0.066, just short of the conventional 0.05 threshold), a
 real, directionally consistent improvement, not proven beyond reasonable
 doubt. See "Known limitations" for the full statistical picture.
 
