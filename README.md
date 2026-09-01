@@ -37,7 +37,7 @@ kit/       vendored, byte-identical organizer starter kit -- never edited, sha25
 harness/   immutable task harness: sanitized data, sandbox, guards, scoring, reporting
 agent/     the two-tier LLM loop: gpt-5.6-sol (brain) plans, gpt-5.6-luna (repair) executes/fixes
 solutions/ n0000 = ported baseline; nNNNN = one per agent iteration
-artifacts/ run_log.jsonl (deliverable), state.json, report.md, final_result.json
+artifacts/ run_log.jsonl (deliverable, incl. a real diff_vs_parent per node), report.md, final_result.json
 scripts/   setup, verification, and the run entry points
 tests/     31+ tests: guards, sandbox execution, convergence FSM, tamper detection, isolation
 ```
@@ -253,6 +253,35 @@ scoring — handing the agent its own answer key would hollow that out.
   search process was strengthened and continued — see "Convergence policy"
   above. Disclosed as two declared phases rather than presented as a single
   clean run.
+
+## What we'd improve given more time
+
+- **Represent user history as aggregate statistics, not raw IDs.** The
+  agent's own sequence-modeling attempt (`n0009`) underperformed because it
+  used a single previous-video-ID as a feature — too sparse to ever repeat
+  for the same user. Rolling engagement rate, recency, and author-affinity
+  counts would carry the same behavioral signal without the sparsity
+  problem. We diagnosed this from reading the agent's actual generated code
+  after the fact; we deliberately did not feed this fix back into the
+  agent's prompts, since that would be answer-key injection.
+- **Replace the simplified node-selection heuristic with a real UCB-style
+  tree search.** The current best/second-best/retry-pool policy is a
+  documented scope cut, not the original design — it's also directly
+  responsible for the convergence window ending up single-direction (see
+  "Known limitations" above) once all 9 direction categories were
+  exhausted by iteration 13.
+- **Extend always-3-seed confirmation to the explore phase.** The four
+  initial `draft` iterations each run on a single seed before the
+  always-3-seed rule applies to later promotions — with more compute
+  budget, confirming those early too would remove one more source of
+  early-run noise.
+- **Give the agent persisted memory across separate runs**, so lessons
+  (not specific fixes — that would undermine the Innovation criterion, but
+  structural facts like "this benchmark barely moves on capacity increases")
+  don't have to be rediscovered from scratch each time.
+- **Investigate the zero-seed-variance iterations** flagged above — worth
+  knowing whether that's a real property of those specific solutions or a
+  sign the seed isn't being threaded through somewhere it should be.
 
 ## Team
 

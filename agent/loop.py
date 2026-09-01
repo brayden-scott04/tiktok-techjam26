@@ -19,6 +19,7 @@ per-direction staleness tracking, rather than a fully general UCB score).
 This is a deliberate scope cut, documented here and in the README, not an
 oversight.
 """
+import difflib
 import json
 import os
 import time
@@ -323,6 +324,31 @@ class AgentLoop:
             repo_root=self.root,
         )
 
+    def _diff_vs_parent(self, parent_id, code_path):
+        """Computes a real unified diff against the parent node's committed
+        code -- the deliverable asks for "the code diff applied" per
+        iteration, and an LLM-written `changes` bullet list is a description,
+        not a diff. Harness-generated, not model-generated, so it can't be
+        gamed or hallucinated. Returns None for a `draft` with no parent, or
+        if the parent's code is unavailable for any reason."""
+        if not parent_id:
+            return None
+        parent = self.state["nodes"].get(parent_id)
+        if not parent or not parent.get("code_path") or not os.path.exists(parent["code_path"]):
+            return None
+        try:
+            with open(parent["code_path"], encoding="utf-8") as fh:
+                parent_code = fh.readlines()
+            with open(code_path, encoding="utf-8") as fh:
+                new_code = fh.readlines()
+        except OSError:
+            return None
+        diff = difflib.unified_diff(
+            parent_code, new_code,
+            fromfile=f"{parent_id}/solution.py", tofile="solution.py",
+        )
+        return "".join(diff)
+
     def _mean_metrics(self, results):
         """results: list of NodeResult, some possibly failed. Returns
         (metrics_dict_or_None, n_seeds_ok)."""
@@ -486,6 +512,8 @@ class AgentLoop:
         if ast_hash:
             self.state["known_ast_hashes"].append(ast_hash)
 
+        diff_vs_parent = self._diff_vs_parent(parent_id, code_path) if parsed else None
+
         node_record = {
             "action": action, "parent_node_id": parent_id, "direction": direction,
             "hypothesis": parsed.get("hypothesis") if parsed else None, "status": status,
@@ -495,6 +523,7 @@ class AgentLoop:
             "expected_effect": parsed.get("expected_effect") if parsed else None,
             "calibration_error": calibration_error,
             "comparison_vs_incumbent_md": comparison_md,
+            "diff_vs_parent": diff_vs_parent,
             "valid_scores_path": os.path.join(node_dir, "valid_scores.npy") if metrics else None,
             "test_scores_path": os.path.join(node_dir, "test_scores.npy") if metrics else None,
             "n_candidates_tried": len(candidates),
@@ -507,6 +536,7 @@ class AgentLoop:
         record["node_id"] = node_id
         record["n_candidates_tried"] = len(candidates)
         record["wall_seconds_this_iteration"] = time.time() - t_iter0
+        record["diff_vs_parent"] = diff_vs_parent
         self._append_log(record)
         self._save_state()
         return record
